@@ -1,0 +1,28 @@
+# dependencies
+node_modules
+.pnp
+.pnp.js
+
+# testing
+coverage
+
+# next.js
+.next/
+out/
+.vercel/
+
+# misc
+.DS_Store
+*.pem
+.env
+.env*.local
+.env.local
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# prisma (tidak dipakai, tapi ada sisa folder dari project lama)
+prisma/
+*.db
+*.db-journal

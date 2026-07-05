@@ -1,160 +1,187 @@
 // lib/citation-formatter.ts
-// Wrapper di atas citation-js untuk format APA 7th, MLA 9th, Chicago,
-// dan custom post-processor untuk "APA Indonesia".
+// Edge-safe manual citation formatter untuk 4 format:
+// - APA 7th Edition
+// - MLA 9th Edition
+// - Chicago Author-Date 17th Edition
+// - APA Indonesia (custom — lihat README untuk heuristik)
+//
+// Tidak dependensi eksternal — pure TypeScript, berjalan di edge runtime.
 
-import { Cite } from "@citation-js/core";
-import "@citation-js/plugin-csl";
 import type { CitationFormat, CitationMetadata, Author } from "@/types/citation";
 
-// Map format kita ke style CSL yang tersedia di citation-js
-const FORMAT_TO_CSL: Record<Exclude<CitationFormat, "apa_indonesia">, string> = {
-  apa: "apa-7th-edition",
-  mla: "modern-language-association-9th-edition",
-  chicago: "chicago-author-date-17th-edition",
-};
+// === Helpers ===
 
-function metadataToCsl(meta: CitationMetadata): Record<string, unknown> {
-  // citation-js menerima object dengan key mirip BibTeX/CSL JSON
-  const type = meta.source_type === "book" ? "book" : meta.source_type === "journal" ? "article-journal" : "webpage";
-
-  const csl: Record<string, unknown> = {
-    type,
-    title: meta.title,
-    author: meta.authors.map((a) => ({
-      given: a.given,
-      family: a.family,
-    })),
-    issued: meta.published_year ? { "date-parts": [[meta.published_year]] } : undefined,
-    publisher: meta.publisher ?? undefined,
-    URL: meta.url ?? undefined,
-    DOI: meta.doi ?? undefined,
-  };
-
-  // Bersihkan field undefined
-  Object.keys(csl).forEach((k) => {
-    if (csl[k] === undefined) delete csl[k];
-  });
-
-  return csl;
+function getInitials(given: string): string {
+  // "Budi Santoso" -> "B. S."
+  return given
+    .split(/[\s.-]+/)
+    .filter(Boolean)
+    .map((part) => `${part[0].toUpperCase()}.`)
+    .join(" ");
 }
 
-function buildFallbackCitation(meta: CitationMetadata, format: CitationFormat): string {
-  // Fallback string assembly jika citation-js gagal (misal di environment tanpa plugin CSL)
-  const authorList = formatAuthorList(meta.authors, format);
-  const year = meta.published_year ? ` (${meta.published_year}).` : "";
-  const title = meta.title ? `. ${meta.title}` : "";
-  const publisher = meta.publisher ? `. ${meta.publisher}` : "";
-  const link = meta.url ? `. ${meta.url}` : "";
-  return `${authorList}${year}${title}${publisher}${link}`;
+function getLastName(author: Author): string {
+  return (author.family || author.given || "Anonim").trim();
 }
 
-function formatAuthorList(authors: Author[], format: CitationFormat): string {
+/**
+ * Format daftar author untuk APA & Chicago:
+ * - 1 author: "Family, F."
+ * - 2 authors: "Family, F., & Family, F."
+ * - 3+ authors: "Family, F., Family, F., & Family, F."
+ */
+function formatAuthorsApaChicago(authors: Author[]): string {
   if (authors.length === 0) return "Anonim";
-  const formatted = authors.map((a) => {
-    const initials = a.given
-      .split(/\s+/)
-      .filter(Boolean)
-      .map((g) => `${g[0].toUpperCase()}.`)
-      .join(" ");
-    if (format === "mla") {
-      return `${a.family}, ${initials}`.trim();
-    }
-    // APA & Chicago: "Family, F. M."
-    return `${a.family}, ${initials}`.trim();
+  const parts = authors.map((a) => {
+    const family = getLastName(a);
+    const initials = a.given ? getInitials(a.given) : "";
+    return initials ? `${family}, ${initials}` : family;
   });
-  if (formatted.length === 1) return formatted[0];
-  if (formatted.length === 2) return `${formatted[0]}, & ${formatted[1]}`;
-  return formatted.slice(0, -1).join(", ") + ", & " + formatted[formatted.length - 1];
+  if (parts.length === 1) return parts[0];
+  if (parts.length === 2) return `${parts[0]}, & ${parts[1]}`;
+  return `${parts.slice(0, -1).join(", ")}, & ${parts[parts.length - 1]}`;
 }
+
+/**
+ * Format daftar author untuk MLA 9th:
+ * - 1 author: "Family, Given"
+ * - 2 authors: "Family, Given, and Given Family"
+ * - 3+ authors: "Family, Given, et al."
+ */
+function formatAuthorsMla(authors: Author[]): string {
+  if (authors.length === 0) return "Anonim";
+  if (authors.length >= 3) {
+    const first = authors[0];
+    return `${getLastName(first)}, ${first.given}, et al.`;
+  }
+  if (authors.length === 2) {
+    const a = authors[0];
+    const b = authors[1];
+    return `${getLastName(a)}, ${a.given}, and ${b.given} ${getLastName(b)}`;
+  }
+  const a = authors[0];
+  return `${getLastName(a)}, ${a.given}`;
+}
+
+/**
+ * Format daftar author untuk APA Indonesia (Given Family, tidak dibalik):
+ * - 1 author: "Budi Santoso"
+ * - 2 authors: "Budi Santoso & Siti Rahayu"
+ * - 3+ authors: "Budi Santoso, Andi Wijaya, & Siti Rahayu"
+ */
+function formatAuthorsIndonesian(authors: Author[]): string {
+  if (authors.length === 0) return "Anonim";
+  const parts = authors.map((a) => {
+    const given = a.given.trim();
+    const family = a.family.trim();
+    if (given && family) return `${given} ${family}`;
+    return family || given || "Anonim";
+  });
+  if (parts.length === 1) return parts[0];
+  if (parts.length === 2) return `${parts[0]} & ${parts[1]}`;
+  return `${parts.slice(0, -1).join(", ")}, & ${parts[parts.length - 1]}`;
+}
+
+function formatTitle(meta: CitationMetadata, format: CitationFormat): string {
+  const t = meta.title.trim();
+  if (format === "apa" || format === "apa_indonesia") {
+    // APA: sentence case untuk judul artikel/bab, title case untuk buku.
+    // Untuk journal/webpage: sentence case + tanpa italic
+    return t;
+  }
+  if (format === "mla") {
+    // MLA: title dalam tanda kutip untuk artikel, italic untuk buku
+    return `"${t}"`;
+  }
+  if (format === "chicago") {
+    // Chicago: title dalam tanda kutip untuk artikel
+    return `"${t}"`;
+  }
+  return t;
+}
+
+function formatPublisher(meta: CitationMetadata): string {
+  return meta.publisher?.trim() || "";
+}
+
+function formatUrlOrDoi(meta: CitationMetadata): string {
+  if (meta.doi) {
+    return `https://doi.org/${meta.doi.replace(/^https?:\/\/(dx\.)?doi\.org\//, "")}`;
+  }
+  return meta.url || "";
+}
+
+// === Main formatters ===
+
+function formatApa(meta: CitationMetadata): string {
+  const authors = formatAuthorsApaChicago(meta.authors);
+  const year = meta.published_year ? `(${meta.published_year})` : "(n.d.)";
+  const title = formatTitle(meta, "apa");
+  const publisher = formatPublisher(meta);
+  const link = formatUrlOrDoi(meta);
+
+  const parts = [`${authors} ${year}.`, `${title}.`];
+  if (publisher) parts.push(`${publisher}.`);
+  if (link) parts.push(`${link}`);
+  return parts.join(" ").replace(/\s+\./g, ".").trim();
+}
+
+function formatMla(meta: CitationMetadata): string {
+  const authors = formatAuthorsMla(meta.authors);
+  const title = formatTitle(meta, "mla");
+  const publisher = formatPublisher(meta);
+  const year = meta.published_year ? `${meta.published_year}` : "";
+  const link = formatUrlOrDoi(meta);
+
+  const parts = [`${authors}.`, `${title}.`];
+  if (publisher) parts.push(`${publisher},`);
+  if (year) parts.push(`${year}.`);
+  if (link) parts.push(link);
+  return parts.join(" ").replace(/\s+,/g, ",").replace(/,\s*\./g, ".").trim();
+}
+
+function formatChicago(meta: CitationMetadata): string {
+  const authors = formatAuthorsApaChicago(meta.authors);
+  const year = meta.published_year ? `${meta.published_year}` : "n.d.";
+  const title = formatTitle(meta, "chicago");
+  const publisher = formatPublisher(meta);
+  const link = formatUrlOrDoi(meta);
+
+  const parts = [`${authors}.`, `${year}.`, `${title}.`];
+  if (publisher) parts.push(`${publisher}.`);
+  if (link) parts.push(link);
+  return parts.join(" ").replace(/\s+\./g, ".").trim();
+}
+
+function formatApaIndonesia(meta: CitationMetadata): string {
+  const authors = formatAuthorsIndonesian(meta.authors);
+  const year = meta.published_year ? `(${meta.published_year})` : "(tanpa tahun)";
+  const title = formatTitle(meta, "apa_indonesia");
+  const publisher = formatPublisher(meta);
+  const link = formatUrlOrDoi(meta);
+
+  const parts = [`${authors} ${year}.`, `${title}.`];
+  if (publisher) parts.push(`${publisher}.`);
+  if (link) parts.push(link);
+  return parts.join(" ").replace(/\s+\./g, ".").trim();
+}
+
+// === Public API ===
 
 export async function formatCitation(
   meta: CitationMetadata,
   format: CitationFormat
 ): Promise<string> {
-  if (format === "apa_indonesia") {
-    // Generate APA 7 dulu, lalu post-process untuk gaya Indonesia
-    const apaText = await safeFormat(meta, "apa");
-    return applyApaIndonesiaRules(apaText, meta);
+  switch (format) {
+    case "apa":
+      return formatApa(meta);
+    case "mla":
+      return formatMla(meta);
+    case "chicago":
+      return formatChicago(meta);
+    case "apa_indonesia":
+      return formatApaIndonesia(meta);
+    default:
+      return formatApa(meta);
   }
-
-  return safeFormat(meta, format);
-}
-
-async function safeFormat(meta: CitationMetadata, format: Exclude<CitationFormat, "apa_indonesia">): Promise<string> {
-  try {
-    const cslData = metadataToCsl(meta);
-    const cite = new Cite(cslData);
-    const html = cite.format("bibliography", {
-      format: "html",
-      template: FORMAT_TO_CSL[format],
-    });
-    return htmlToPlainText(html);
-  } catch (err) {
-    console.error(`citation-js error (${format}):`, err);
-    return buildFallbackCitation(meta, format);
-  }
-}
-
-function htmlToPlainText(html: string): string {
-  return html
-    .replace(/<\/?[a-zA-Z][^>]*>/g, "")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-/**
- * Post-processor "APA Indonesia" (custom, non-standar internasional).
- * Aturan heuristik yang umum dipakai kampus Indonesia:
- * - Nama penulis Indonesia TIDAK dibalik urutannya pada format daftar pustaka.
- *   Contoh: "Budi Santoso" tetap ditulis "Budi Santoso", bukan "Santoso, B."
- * - Tahun tetap di-parentheses.
- * - DOI/URL tetap dicantumkan di akhir.
- *
- * Catatan: rule ini perlu divalidasi dengan sample dari 3-5 kampus (lihat agents.md).
- * Implementasi ini menggunakan heuristik sederhana: jika nama keluarga
- * kosong / mengandung spasi DAN nama given juga multi-kata, kemungkinan
- * besar itu nama Indonesia dan kita pakai format "Given Family" (tidak dibalik).
- */
-function applyApaIndonesiaRules(apaText: string, meta: CitationMetadata): string {
-  // Jika ada authors, kita bangun ulang string author sesuai gaya Indonesia
-  // dengan mempertahankan format tahun, judul, dll dari hasil APA.
-  const idAuthors = formatIndonesianAuthors(meta.authors);
-  if (!idAuthors) {
-    return apaText;
-  }
-
-  // Coba ekstrak sisa string APA setelah author list (tahun, judul, dst)
-  // Pola umum APA: "Santoso, B. (2023). Judul..."
-  // Kita ambil segmen mulai dari "(YYYY)" atau tahun pertama yang ditemukan
-  const yearMatch = apaText.match(/\((\d{4})[a-z]?\)/);
-  const restStart = yearMatch ? apaText.indexOf(yearMatch[0]) : -1;
-  const rest = restStart >= 0 ? apaText.slice(restStart) : apaText;
-
-  return `${idAuthors}${rest.startsWith(" ") ? rest : " " + rest}`;
-}
-
-function formatIndonesianAuthors(authors: Author[]): string | null {
-  if (!authors || authors.length === 0) return null;
-
-  // Deteksi heuristik: jika semua author punya family single-word tanpa spasi,
-  // kemungkinan besar bukan nama Indonesia style. Tapi ini tidak reliable 100% —
-  // oleh karena itu kita TETAP pakai format "Given Family" untuk konsistensi
-  // dengan guideline kampus Indonesia pada umumnya.
-  const formatted = authors.map((a) => {
-    const trimmedGiven = a.given.trim();
-    const trimmedFamily = a.family.trim();
-    // Tulis lengkap: "Budi Santoso" (given + family)
-    if (trimmedGiven && trimmedFamily) {
-      return `${trimmedGiven} ${trimmedFamily}`;
-    }
-    return trimmedGiven || trimmedFamily || "Anonim";
-  });
-
-  if (formatted.length === 1) return formatted[0];
-  if (formatted.length === 2) return `${formatted[0]} & ${formatted[1]}`;
-  return formatted.slice(0, -1).join(", ") + ", & " + formatted[formatted.length - 1];
 }

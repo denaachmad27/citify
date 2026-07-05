@@ -12,43 +12,81 @@ const sample: CitationMetadata = {
   source_type: "journal",
 };
 
-describe("citation-formatter: format output", () => {
-  it("format APA menghasilkan string dengan author dan tahun", async () => {
+describe("citation-formatter: APA", () => {
+  it("menghasilkan format APA 7 dengan author dibalik dan tahun di kurung", async () => {
     const result = await formatCitation(sample, "apa");
-    expect(result).toContain("2023");
-    expect(result.toLowerCase()).toContain("santoso");
-  }, 15000);
+    expect(result).toContain("Santoso, B.");
+    expect(result).toContain("(2023)");
+    expect(result).toContain("https://doi.org/10.1234/xyz");
+  });
 
-  it("format MLA menghasilkan string dengan author", async () => {
+  it("menggunakan 'n.d.' saat tahun tidak ada", async () => {
+    const noYear = { ...sample, published_year: null };
+    const result = await formatCitation(noYear, "apa");
+    expect(result).toContain("(n.d.)");
+  });
+});
+
+describe("citation-formatter: MLA", () => {
+  it("menghasilkan format MLA dengan author 'Family, Given'", async () => {
     const result = await formatCitation(sample, "mla");
-    expect(result.toLowerCase()).toContain("santoso");
-  }, 15000);
-
-  it("format Chicago menghasilkan string dengan author dan tahun", async () => {
-    const result = await formatCitation(sample, "chicago");
-    expect(result.toLowerCase()).toContain("santoso");
+    expect(result).toContain("Santoso, Budi");
     expect(result).toContain("2023");
-  }, 15000);
+  });
 
-  it("format APA Indonesia tidak membalik nama (Budi Santoso, bukan Santoso, B.)", async () => {
+  it("menggunakan 'et al.' untuk 3+ authors", async () => {
+    const triple = {
+      ...sample,
+      authors: [
+        { given: "Andi", family: "Wijaya" },
+        { given: "Siti", family: "Rahayu" },
+        { given: "Budi", family: "Santoso" },
+      ],
+    };
+    const result = await formatCitation(triple, "mla");
+    expect(result).toContain("et al.");
+  });
+});
+
+describe("citation-formatter: Chicago", () => {
+  it("menghasilkan format Chicago author-date", async () => {
+    const result = await formatCitation(sample, "chicago");
+    expect(result).toContain("Santoso, B.");
+    expect(result).toContain("2023");
+  });
+});
+
+describe("citation-formatter: APA Indonesia", () => {
+  it("menulis nama lengkap 'Budi Santoso' (tidak dibalik)", async () => {
     const result = await formatCitation(sample, "apa_indonesia");
     expect(result).toContain("Budi Santoso");
     expect(result).not.toMatch(/^Santoso,\s*B\./);
-  }, 15000);
+  });
 
-  it("format dengan multiple authors memuat semua nama", async () => {
-    const multi: CitationMetadata = {
+  it("memakai 'tanpa tahun' jika tahun null", async () => {
+    const noYear = { ...sample, published_year: null };
+    const result = await formatCitation(noYear, "apa_indonesia");
+    expect(result).toContain("(tanpa tahun)");
+  });
+});
+
+describe("citation-formatter: multiple authors", () => {
+  it("menggunakan '&' untuk APA 2 authors", async () => {
+    const two = {
       ...sample,
       authors: [
         { given: "Andi", family: "Wijaya" },
         { given: "Siti", family: "Rahayu" },
       ],
     };
-    const result = await formatCitation(multi, "apa");
-    expect(result.toLowerCase()).toContain("wijaya");
-    expect(result.toLowerCase()).toContain("rahayu");
-  }, 15000);
+    const result = await formatCitation(two, "apa");
+    expect(result).toContain("Wijaya, A.");
+    expect(result).toContain("Rahayu, S.");
+    expect(result).toContain("&");
+  });
+});
 
+describe("citation-formatter: edge cases", () => {
   it("tidak error saat metadata minimal", async () => {
     const minimal: CitationMetadata = {
       title: "Artikel Minimal",
@@ -61,5 +99,17 @@ describe("citation-formatter: format output", () => {
     };
     const result = await formatCitation(minimal, "apa");
     expect(result.length).toBeGreaterThan(0);
-  }, 15000);
+    expect(result).toContain("Y, X.");
+  });
+
+  it("prefers DOI over URL ketika keduanya ada", async () => {
+    const result = await formatCitation(sample, "apa");
+    expect(result).toContain("doi.org");
+  });
+
+  it("fallback ke URL ketika DOI tidak ada", async () => {
+    const noDoi = { ...sample, doi: null };
+    const result = await formatCitation(noDoi, "apa");
+    expect(result).toContain("example.com/artikel");
+  });
 });

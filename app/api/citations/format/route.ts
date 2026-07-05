@@ -5,6 +5,9 @@ import { NextResponse } from "next/server";
 import { formatCitationRequestSchema } from "@/lib/validations";
 import { formatCitation } from "@/lib/citation-formatter";
 
+// Cloudflare Pages menjalankan semua routes sebagai edge runtime
+export const runtime = "edge";
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();

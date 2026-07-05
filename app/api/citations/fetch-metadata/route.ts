@@ -1,10 +1,13 @@
 // POST /api/citations/fetch-metadata
 // Ambil metadata publikasi dari DOI (CrossRef) atau URL (Cheerio).
-// Stateless, publik, tanpa rate limit.
+// Stateless, publik, edge runtime untuk kompatibilitas Cloudflare Pages.
 
 import { NextResponse } from "next/server";
 import { fetchMetadataRequestSchema } from "@/lib/validations";
 import { fetchMetadata } from "@/lib/metadata-fetcher";
+
+// Cloudflare Pages menjalankan semua routes sebagai edge runtime
+export const runtime = "edge";
 
 export async function POST(req: Request) {
   try {

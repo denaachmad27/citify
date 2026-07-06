@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Citify — Daftar Pustaka Otomatis</title>
+  <title>Sitasikan — Daftar Pustaka Otomatis</title>
 
   <!-- Security Headers -->
   <meta http-equiv="Content-Security-Policy" content="
@@ -12,7 +12,7 @@
     style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com;
     img-src 'self' data: https:;
     font-src 'self' data:;
-    connect-src 'self' https://api.crossref.org http://localhost:8787 https://citify-worker.denaachmad27.workers.dev;
+    connect-src 'self' https://api.crossref.org https://citify-worker.denaachmad-ab.workers.dev http://localhost:8787;
     frame-ancestors 'none';
     base-uri 'self';
     form-action 'self';
@@ -161,6 +161,58 @@
     </div>
   </main>
 
+  <!-- FOOTER — Credit & Kontak -->
+  <footer class="border-t border-gray-200 bg-white">
+    <div class="mx-auto max-w-[1320px] px-6 py-8 md:px-8">
+      <div class="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+
+        <!-- Credit open-source -->
+        <div>
+          <p class="font-serif text-sm text-gray-500">
+            Dibangun dengan karya open-source:
+          </p>
+          <div class="mt-3 flex flex-wrap gap-x-6 gap-y-2 font-mono text-[11px] text-gray-400">
+            <a href="https://github.com/honojs/hono" target="_blank" rel="noopener noreferrer"
+               class="underline-offset-4 hover:text-black hover:underline transition-colors">
+              hono<span class="text-gray-300">/</span>hono
+            </a>
+            <a href="https://github.com/tailwindlabs/tailwindcss" target="_blank" rel="noopener noreferrer"
+               class="underline-offset-4 hover:text-black hover:underline transition-colors">
+              tailwindlabs<span class="text-gray-300">/</span>tailwindcss
+            </a>
+            <a href="https://github.com/citation-js/citation-js" target="_blank" rel="noopener noreferrer"
+               class="underline-offset-4 hover:text-black hover:underline transition-colors">
+              citation-js<span class="text-gray-300">/</span>citation-js
+            </a>
+            <a href="https://github.com/cloudflare/workers-sdk" target="_blank" rel="noopener noreferrer"
+               class="underline-offset-4 hover:text-black hover:underline transition-colors">
+              cloudflare<span class="text-gray-300">/</span>workers-sdk
+            </a>
+          </div>
+        </div>
+
+        <!-- Kontak -->
+        <div class="space-y-2 font-serif text-sm text-gray-500">
+          <p class="text-xs text-gray-400">Kontak</p>
+          <a href="mailto:denaachmad.ab@gmail.com"
+             class="inline-block font-mono text-[11px] text-gray-400 underline-offset-4 hover:text-black hover:underline transition-colors">
+            denaachmad.ab@gmail.com
+          </a>
+        </div>
+
+        <!-- Metadata credit -->
+        <div class="font-mono text-[10px] uppercase tracking-widest text-gray-400">
+          <span>metadata oleh</span>
+          <a href="https://www.crossref.org/" target="_blank" rel="noopener noreferrer"
+             class="ml-1 underline-offset-4 hover:text-black hover:underline transition-colors">
+            CrossRef
+          </a>
+        </div>
+
+      </div>
+    </div>
+  </footer>
+
   <script>
     // ============================================================
     // CITATION FORMATTER (pure JS — 4 format)
@@ -275,7 +327,7 @@
       const cleaned = doi.replace(/^https?:\/\/(dx\.)?doi\.org\//, '').trim();
       const url = `${CROSSREF_API}/${encodeURIComponent(cleaned)}`;
       const res = await fetch(url, {
-        // INFO: Email hello@citify.app di User-Agent bersifat publik & disengaja (standar CrossRef)`n        // untuk identifikasi bot yang baik — ini bukan kebocoran data.`n        headers: { 'User-Agent': 'Citify/0.1 (mailto:hello@citify.app)' }
+        // INFO: Email hello@citify.app di User-Agent bersifat publik & disengaja (standar CrossRef)`n        // untuk identifikasi bot yang baik — ini bukan kebocoran data.`n        headers: { 'User-Agent': 'Sitasikan/0.1 (mailto:denaachmad.ab@gmail.com)' }
       });
       if (!res.ok) throw new Error('DOI tidak ditemukan di CrossRef');
       const json = await res.json();
@@ -303,7 +355,7 @@
       };
     }
 
-    // ============================================================`n    // Scrape via Hono Worker (untuk URL)`n    // ============================================================`n    // ⚠️ KEAMANAN: Worker URL di bawah mengekspos Cloudflare account identifier.`n    //    - Pastikan Worker sudah diproteksi rate-limiting (WAF Rules / kode Hono).`n    //    - Untuk production, gunakan Custom Domain (misal api.citify.app) agar`n    //      account subdomain *.workers.dev tidak terekspos publik.`n    //    - SETELAH DEPLOY: ganti URL di bawah dengan URL Worker kamu.`n    //    - Cari di Cloudflare Dashboard → Workers & Pages → Workers → citify-worker
+    // ============================================================`n    // Scrape via Hono Worker (untuk URL)`n    // ============================================================`n    // ⚠️ KEAMANAN: Worker URL di bawah mengekspos Cloudflare account identifier.`n    //    - Pastikan Worker sudah diproteksi rate-limiting (WAF Rules / kode Hono).`n    //    - Untuk production, gunakan Custom Domain (misal api.sitasikan.app) agar`n    //      account subdomain *.workers.dev tidak terekspos publik.`n    //    - SETELAH DEPLOY: ganti URL di bawah dengan URL Worker kamu.`n    //    - Cari di Cloudflare Dashboard → Workers & Pages → Workers → sitasikan-worker
     const SCRAPE_API = 'https://citify-worker.denaachmad-ab.workers.dev/api/scrape'
 
     async function fetchFromScraper(url) {

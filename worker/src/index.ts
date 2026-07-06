@@ -1,5 +1,5 @@
 /**
- * Citify Worker — Hono-based edge worker untuk scraping metadata URL.
+ * Sitasikan Worker — Hono-based edge worker untuk scraping metadata URL.
  *
  * Satu-satunya endpoint:
  *   POST /api/scrape  →  fetch HTML dari URL, parse meta tags, return JSON
@@ -13,11 +13,26 @@ const app = new Hono();
 
 // ─── Allowed Origins (CORS) ──────────────────────────────────────────
 const ALLOWED_ORIGINS = [
-  "https://citify.app",
+  "https://sitasikan.app",
   "https://denaachmad27.github.io",
+  "https://patient-king-5386.denaachmad-ab.workers.dev",  // Cloudflare Pages
   "http://localhost:3000",
   "http://localhost:8787",
 ];
+
+function isAllowedOrigin(origin: string): boolean {
+  if (ALLOWED_ORIGINS.includes(origin)) return true;
+  // Izinkan semua subdomain di bawah denaachmad-ab.workers.dev (Pages preview branches, dll)
+  if (origin.endsWith(".denaachmad-ab.workers.dev")) return true;
+  // Development: izinkan localhost dengan port apapun
+  if (
+    origin.startsWith("http://localhost:") ||
+    origin.startsWith("http://127.0.0.1:")
+  ) {
+    return true;
+  }
+  return false;
+}
 
 // Izinkan CORS hanya dari origin yang terdaftar
 app.use(
@@ -26,14 +41,7 @@ app.use(
     origin: (origin) => {
       // Izinkan juga request tanpa origin (curl, Postman, server-to-server)
       if (!origin) return "*";
-      if (ALLOWED_ORIGINS.includes(origin)) return origin;
-      // Di development, izinkan localhost dengan port apapun
-      if (
-        origin.startsWith("http://localhost:") ||
-        origin.startsWith("http://127.0.0.1:")
-      ) {
-        return origin;
-      }
+      if (isAllowedOrigin(origin)) return origin;
       return ALLOWED_ORIGINS[0]; // fallback ke production origin
     },
     allowMethods: ["GET", "POST", "OPTIONS"],
@@ -292,15 +300,53 @@ async function scrapeUrl(url: string): Promise<ScrapeResult | { success: false; 
     return { success: false, error: "URL dengan hostname internal tidak diizinkan" };
   }
 
-  // Fetch HTML
-  const res = await fetch(parsed.toString(), {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (compatible; CitifyBot/0.1; +https://citify.app)",
-    },
-    redirect: "follow",
-    signal: AbortSignal.timeout(10_000), // timeout 10 detik
-  });
+  // Fetch HTML dengan validasi SSRF di setiap redirect
+  const MAX_REDIRECTS = 5;
+  let currentUrl = parsed.toString();
+  let res!: Response; // definite assignment — loop selalu jalan minimal 1x
+
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    // Validasi SSRF di URL saat ini (sebelum setiap fetch)
+    let currentParsed: URL;
+    try {
+      currentParsed = new URL(currentUrl);
+      if (!["http:", "https:"].includes(currentParsed.protocol)) {
+        return { success: false, error: "Redirect ke protokol yang tidak didukung" };
+      }
+    } catch {
+      return { success: false, error: "URL redirect tidak valid" };
+    }
+
+    if (isBlockedHostname(currentParsed.hostname)) {
+      return { success: false, error: "Redirect ke hostname internal tidak diizinkan" };
+    }
+
+    res = await fetch(currentUrl, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (compatible; SitasikanBot/0.1; +https://sitasikan.app)",
+      },
+      redirect: "manual",
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    // Bukan redirect → lanjutkan
+    const status = res.status;
+    if (status < 300 || status >= 400) break;
+
+    // Redirect 3xx
+    const location = res.headers.get("Location");
+    if (!location) {
+      return { success: false, error: "Redirect tanpa header Location" };
+    }
+
+    // Resolve relative URL
+    currentUrl = new URL(location, currentParsed).toString();
+
+    if (hop === MAX_REDIRECTS) {
+      return { success: false, error: "Terlalu banyak redirect" };
+    }
+  }
 
   if (!res.ok) {
     return { success: false, error: `Gagal mengambil halaman: ${res.status} ${res.statusText}` };

@@ -1,0 +1,592 @@
+﻿<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Citify — Daftar Pustaka Otomatis</title>
+
+  <!-- Security Headers -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com;
+    style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com;
+    img-src 'self' data: https:;
+    font-src 'self' data:;
+    connect-src 'self' https://api.crossref.org http://localhost:8787 https://citify-worker.denaachmad27.workers.dev;
+    frame-ancestors 'none';
+    base-uri 'self';
+    form-action 'self';
+  " />
+  <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+  <meta http-equiv="X-Frame-Options" content="DENY" />
+  <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin" />
+  <meta http-equiv="Permissions-Policy" content="accelerometer=(), camera=(), geolocation=(), microphone=(), payment=()" />
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            serif: ['Georgia', 'ui-serif', 'serif'],
+            mono: ['"Courier New"', 'monospace'],
+          },
+          colors: {
+            paper: '#faf8f5',
+            ink: '#1a1a1a',
+            accent: '#c0392b',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { background: #faf8f5; color: #1a1a1a; }
+    .smallcaps { font-variant: small-caps; letter-spacing: 0.05em; font-size: 0.75rem; }
+    .field {
+      border: 1px solid #d0ccc6; padding: 0.75rem 1rem; width: 100%;
+      font-size: 1.125rem; background: white;
+    }
+    .field:focus { outline: 2px solid #c0392b; outline-offset: -1px; }
+    .btn-ink {
+      background: #1a1a1a; color: #faf8f5; padding: 0.75rem 1.5rem;
+      font-size: 0.875rem; font-weight: 600; cursor: pointer;
+      transition: opacity 0.2s; display: inline-flex; align-items: center; gap: 0.5rem;
+    }
+    .btn-ink:hover { opacity: 0.85; }
+    .btn-ink:disabled { opacity: 0.4; cursor: not-allowed; }
+    .hanging-indent {
+      padding-left: 1.5rem;
+      text-indent: -1.5rem;
+    }
+    .spinner {
+      display: inline-block; width: 1rem; height: 1rem;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: white; border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <main class="relative min-h-screen">
+    <div class="mx-auto max-w-[1320px] px-6 py-12 md:px-8 md:py-16">
+
+      <!-- HEADER ala koran -->
+      <header class="mb-12 border-b border-gray-300 pb-8">
+        <div class="mb-6 flex items-center justify-between font-mono text-[10px] uppercase tracking-widest text-gray-500">
+          <div class="flex items-center gap-3">
+            <span>edisi 01</span><span>·</span><span>2026</span>
+            <span class="hidden sm:inline">·</span>
+            <span class="hidden sm:inline">generator sitasi · untuk pelajar indonesia</span>
+          </div>
+          <span class="hidden md:inline">gratis · tanpa daftar</span>
+        </div>
+        <h1 class="font-sans text-5xl md:text-6xl font-black tracking-tighter">
+          Paste link,
+          <br>dapat <span class="text-[#c0392b]">sitasi</span>
+          <span class="relative inline-block">
+            rapi
+            <svg class="absolute -bottom-2 left-0 w-full" viewBox="0 0 200 12" fill="none">
+              <path d="M2 8 C 50 2, 150 2, 198 8" stroke="currentColor" stroke-width="2" class="text-[#c0392b]" />
+            </svg>
+          </span>.
+        </h1>
+        <p class="mt-5 max-w-2xl font-serif text-lg text-gray-600">
+          Tempel URL atau DOI jurnal, pilih format — kami kerjakan sisanya.
+          Tinggal <em>copy</em> hasilnya. Gratis selamanya.
+        </p>
+      </header>
+
+      <!-- CONTENT -->
+      <div class="grid grid-cols-12 gap-10">
+        <section class="col-span-12 lg:col-span-8">
+          <div id="app"></div>
+        </section>
+
+        <!-- ASIDE -->
+        <aside class="col-span-12 lg:col-span-4">
+          <div class="border-l border-gray-200 pl-8">
+            <div class="smallcaps mb-3">Empat format, satu konsistensi</div>
+            <dl class="space-y-5">
+              <div class="border-t border-gray-200 pt-3">
+                <div class="flex items-baseline gap-3">
+                  <span class="text-xl">APA</span>
+                  <span class="text-sm font-medium">American Psychological Association</span>
+                </div>
+                <p class="mt-1 font-serif text-sm text-gray-500">Standar paling umum untuk skripsi di Indonesia.</p>
+              </div>
+              <div class="border-t border-gray-200 pt-3">
+                <div class="flex items-baseline gap-3">
+                  <span class="text-xl">MLA</span>
+                  <span class="text-sm font-medium">Modern Language Association</span>
+                </div>
+                <p class="mt-1 font-serif text-sm text-gray-500">Dominan di bidang humaniora dan sastra.</p>
+              </div>
+              <div class="border-t border-gray-200 pt-3">
+                <div class="flex items-baseline gap-3">
+                  <span class="text-xl">CHI</span>
+                  <span class="text-sm font-medium">Chicago Manual of Style</span>
+                </div>
+                <p class="mt-1 font-serif text-sm text-gray-500">Pilihan untuk sejarah dan ilmu sosial.</p>
+              </div>
+              <div class="border-t border-gray-200 pt-3">
+                <div class="flex items-baseline gap-3">
+                  <span class="text-xl">ID</span>
+                  <span class="text-sm font-medium">APA Indonesia</span>
+                </div>
+                <p class="mt-1 font-serif text-sm text-gray-500">Modifikasi untuk kebiasaan kampus lokal.</p>
+              </div>
+            </dl>
+
+            <div class="mt-10 border-t border-gray-200 pt-6">
+              <div class="smallcaps mb-2">Cara pakai</div>
+              <ol class="space-y-2 font-serif text-sm text-gray-500">
+                <li><span class="mr-2">1.</span> Tempel URL atau ketik DOI</li>
+                <li><span class="mr-2">2.</span> Pilih format</li>
+                <li><span class="mr-2">3.</span> Tekan <em>+ Tambah</em></li>
+                <li><span class="mr-2">4.</span> Salin satu per satu atau semua sekaligus</li>
+              </ol>
+            </div>
+
+            <div class="mt-10 border-t border-gray-200 pt-6">
+              <p class="font-serif text-xs italic text-gray-400">
+                DOI diproses langsung via CrossRef API. URL diproses lewat edge worker.
+                Data tidak disimpan ke server.
+              </p>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // ============================================================
+    // CITATION FORMATTER (pure JS — 4 format)
+    // ============================================================
+    function getInitials(given) {
+      return given.split(/[\s.-]+/).filter(Boolean).map(p => p[0].toUpperCase() + '.').join(' ');
+    }
+    function getLastName(author) {
+      return (author.family || author.given || 'Anonim').trim();
+    }
+
+    function formatAuthorsApaChicago(authors) {
+      if (authors.length === 0) return 'Anonim';
+      const parts = authors.map(a => {
+        const family = getLastName(a);
+        const initials = a.given ? getInitials(a.given) : '';
+        return initials ? `${family}, ${initials}` : family;
+      });
+      if (parts.length === 1) return parts[0];
+      if (parts.length === 2) return `${parts[0]}, & ${parts[1]}`;
+      return `${parts.slice(0, -1).join(', ')}, & ${parts[parts.length - 1]}`;
+    }
+
+    function formatAuthorsMla(authors) {
+      if (authors.length === 0) return 'Anonim';
+      if (authors.length >= 3) {
+        const first = authors[0];
+        return `${getLastName(first)}, ${first.given}, et al.`;
+      }
+      if (authors.length === 2) {
+        const a = authors[0], b = authors[1];
+        return `${getLastName(a)}, ${a.given}, and ${b.given} ${getLastName(b)}`;
+      }
+      const a = authors[0];
+      return `${getLastName(a)}, ${a.given}`;
+    }
+
+    function formatAuthorsIndonesian(authors) {
+      if (authors.length === 0) return 'Anonim';
+      const parts = authors.map(a => {
+        const given = (a.given || '').trim();
+        const family = (a.family || '').trim();
+        if (given && family) return `${given} ${family}`;
+        return family || given || 'Anonim';
+      });
+      if (parts.length === 1) return parts[0];
+      if (parts.length === 2) return `${parts[0]} & ${parts[1]}`;
+      return `${parts.slice(0, -1).join(', ')}, & ${parts[parts.length - 1]}`;
+    }
+
+    function getDoiUrl(meta) {
+      if (meta.doi) return `https://doi.org/${meta.doi.replace(/^https?:\/\/(dx\.)?doi\.org\//, '')}`;
+      return meta.url || '';
+    }
+
+    function formatApa(meta) {
+      const authors = formatAuthorsApaChicago(meta.authors);
+      const year = meta.published_year ? `(${meta.published_year})` : '(n.d.)';
+      const link = getDoiUrl(meta);
+      const parts = [`${authors} ${year}.`, `${meta.title}.`];
+      if (meta.publisher) parts.push(`${meta.publisher}.`);
+      if (link) parts.push(link);
+      return parts.join(' ').replace(/\s+\./g, '.').trim();
+    }
+
+    function formatMla(meta) {
+      const authors = formatAuthorsMla(meta.authors);
+      const link = getDoiUrl(meta);
+      const parts = [`${authors}.`, `"${meta.title}".`];
+      if (meta.publisher) parts.push(`${meta.publisher},`);
+      if (meta.published_year) parts.push(`${meta.published_year}.`);
+      if (link) parts.push(link);
+      return parts.join(' ').replace(/\s+,/g, ',').replace(/,\s*\./g, '.').trim();
+    }
+
+    function formatChicago(meta) {
+      const authors = formatAuthorsApaChicago(meta.authors);
+      const year = meta.published_year ? `${meta.published_year}` : 'n.d.';
+      const link = getDoiUrl(meta);
+      const parts = [`${authors}.`, `${year}.`, `"${meta.title}".`];
+      if (meta.publisher) parts.push(`${meta.publisher}.`);
+      if (link) parts.push(link);
+      return parts.join(' ').replace(/\s+\./g, '.').trim();
+    }
+
+    function formatApaIndonesia(meta) {
+      const authors = formatAuthorsIndonesian(meta.authors);
+      const year = meta.published_year ? `(${meta.published_year})` : '(tanpa tahun)';
+      const link = getDoiUrl(meta);
+      const parts = [`${authors} ${year}.`, `${meta.title}.`];
+      if (meta.publisher) parts.push(`${meta.publisher}.`);
+      if (link) parts.push(link);
+      return parts.join(' ').replace(/\s+\./g, '.').trim();
+    }
+
+    function formatCitation(meta, format) {
+      switch (format) {
+        case 'apa': return formatApa(meta);
+        case 'mla': return formatMla(meta);
+        case 'chicago': return formatChicago(meta);
+        case 'apa_indonesia': return formatApaIndonesia(meta);
+        default: return formatApa(meta);
+      }
+    }
+
+    // ============================================================
+    // CrossRef API — langsung dari browser (CORS diizinkan)
+    // ============================================================
+    const CROSSREF_API = 'https://api.crossref.org/works';
+
+    async function fetchFromCrossRef(doi) {
+      const cleaned = doi.replace(/^https?:\/\/(dx\.)?doi\.org\//, '').trim();
+      const url = `${CROSSREF_API}/${encodeURIComponent(cleaned)}`;
+      const res = await fetch(url, {
+        // INFO: Email hello@citify.app di User-Agent bersifat publik & disengaja (standar CrossRef)`n        // untuk identifikasi bot yang baik — ini bukan kebocoran data.`n        headers: { 'User-Agent': 'Citify/0.1 (mailto:hello@citify.app)' }
+      });
+      if (!res.ok) throw new Error('DOI tidak ditemukan di CrossRef');
+      const json = await res.json();
+      const work = json.message;
+      if (!work || !work.title?.[0]) throw new Error('Metadata tidak ditemukan');
+
+      const authors = (work.author || [])
+        .filter(a => a.given || a.family)
+        .map(a => ({ given: (a.given || '').trim(), family: (a.family || '').trim() }));
+      if (authors.length === 0) throw new Error('Tidak ada data penulis');
+
+      const parts = work.published_print?.['date-parts']?.[0]
+        ?? work.published_online?.['date-parts']?.[0]
+        ?? work.created?.['date-parts']?.[0];
+      const year = parts?.[0] || null;
+
+      return {
+        title: work.title[0],
+        authors,
+        published_year: year,
+        publisher: work['container-title']?.[0] || work.publisher || null,
+        url: work.URL || `https://doi.org/${cleaned}`,
+        doi: work.DOI || cleaned,
+        source_type: work.type?.includes('journal') ? 'journal' : 'webpage',
+      };
+    }
+
+    // ============================================================`n    // Scrape via Hono Worker (untuk URL)`n    // ============================================================`n    // ⚠️ KEAMANAN: Worker URL di bawah mengekspos Cloudflare account identifier.`n    //    - Pastikan Worker sudah diproteksi rate-limiting (WAF Rules / kode Hono).`n    //    - Untuk production, gunakan Custom Domain (misal api.citify.app) agar`n    //      account subdomain *.workers.dev tidak terekspos publik.`n    //    - SETELAH DEPLOY: ganti URL di bawah dengan URL Worker kamu.`n    //    - Cari di Cloudflare Dashboard → Workers & Pages → Workers → citify-worker
+    const SCRAPE_API = 'https://citify-worker.denaachmad-ab.workers.dev/api/scrape'
+
+    async function fetchFromScraper(url) {
+      const res = await fetch(SCRAPE_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url })
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Gagal mengambil metadata (${res.status})`);
+      }
+      return await res.json();
+    }
+
+    // ============================================================
+    // UI — Vanilla JS
+    // ============================================================
+    const DOI_PATTERN = /\b(10\.\d{4,9}\/[-._;()/:A-Z0-9]+)\b/i;
+
+    function isDoiInput(value) {
+      return DOI_PATTERN.test(value.trim());
+    }
+
+    const FORMATS = [
+      { value: 'apa', label: 'APA', tag: '7th', sample: 'Santoso, B. (2023). Judul…' },
+      { value: 'mla', label: 'MLA', tag: '9th', sample: 'Santoso, Budi. "Judul…"' },
+      { value: 'chicago', label: 'Chicago', tag: '17th', sample: 'Santoso, Budi. 2023. "Judul…"' },
+      { value: 'apa_indonesia', label: 'APA ID', tag: 'lokal', sample: 'Budi Santoso. (2023). Judul…' },
+    ];
+
+    const state = {
+      value: '',
+      format: 'apa',
+      loading: false,
+      error: null,
+      history: [],
+      copiedId: null,
+      allCopied: false,
+    };
+
+    function render() {
+      const app = document.getElementById('app');
+      const h = state.history;
+      app.innerHTML = `
+        <form id="form" class="space-y-8">
+          <div>
+            <div class="smallcaps mb-3">§ 1 — Sumber</div>
+            <div class="flex items-center gap-3">
+              <input id="source-input" type="text" value="${escapeHtml(state.value)}" required
+                placeholder="URL atau DOI — mis: https://... atau 10.1234/abc"
+                class="field font-serif text-lg" />
+            </div>
+          </div>
+
+          <div>
+            <div class="smallcaps mb-3">§ 2 — Gaya sitasi</div>
+            <div class="grid grid-cols-2 gap-px bg-gray-300 md:grid-cols-4">
+              ${FORMATS.map(f => `
+                <button type="button" data-format="${f.value}"
+                  class="format-btn flex flex-col items-start gap-0.5 p-3 text-left transition-colors
+                    ${state.format === f.value ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'}">
+                  <span class="text-base font-semibold">${f.label}</span>
+                  <span class="font-mono text-[10px] ${state.format === f.value ? 'text-white/60' : 'text-gray-400'}">
+                    ed. ${f.tag}
+                  </span>
+                </button>
+              `).join('')}
+            </div>
+            <p class="mt-2 font-serif text-xs italic text-gray-400">
+              Preview: ${FORMATS.find(f => f.value === state.format)?.sample}
+            </p>
+          </div>
+
+          <!-- Tombol Proses -->
+          <div class="pt-4">
+            <button type="submit" id="btn-submit"
+              class="btn-ink w-full justify-center text-base tracking-wide disabled:opacity-40"
+              ${state.loading || !state.value.trim() ? 'disabled' : ''}>
+              ${state.loading
+                ? '<span class="spinner"></span> Memproses…'
+                : 'Proses'
+              }
+            </button>
+            <p class="mt-2 text-center font-serif text-xs text-gray-400" id="source-hint">
+              ${detectSourceType(state.value)}
+            </p>
+          </div>
+        </form>
+
+        ${state.error ? `
+          <div class="mt-6 border-l-2 border-red-600 bg-red-50 p-4">
+            <div class="smallcaps text-red-600">Errata</div>
+            <p class="mt-1 font-serif text-sm">${escapeHtml(state.error)}</p>
+          </div>
+        ` : ''}
+
+        ${h.length > 0 ? `
+          <section class="mt-12">
+            <header class="flex flex-wrap items-baseline justify-between gap-3 border-b border-gray-300 pb-3">
+              <div>
+                <div class="smallcaps text-red-600">§ Daftar Pustaka · Sesi ini</div>
+                <h2 class="mt-1 text-2xl font-bold tracking-tighter">${h.length} entri</h2>
+              </div>
+              <div class="flex items-center gap-3">
+                <button id="copy-all" class="btn-ink !py-2 !px-4 !text-sm">
+                  ${state.allCopied ? '✓ Tersalin semua' : 'Salin semua ↓'}
+                </button>
+                <button id="clear-all"
+                  class="font-mono text-xs uppercase tracking-widest text-gray-400 underline-offset-4 hover:text-red-600 hover:underline">
+                  Hapus semua
+                </button>
+              </div>
+            </header>
+            <ol class="mt-6 space-y-5">
+              ${h.map((item, idx) => `
+                <li class="group border-b border-gray-200 pb-5 last:border-b-0">
+                  <div class="grid grid-cols-12 gap-3">
+                    <div class="col-span-1">
+                      <span class="text-2xl">${String(h.length - idx).padStart(2, '0')}</span>
+                    </div>
+                    <div class="col-span-11">
+                      <div class="mb-1.5 flex flex-wrap items-center gap-2 font-mono text-[10px] uppercase tracking-widest">
+                        <span class="border border-gray-300 px-1.5 py-0.5 text-gray-500">
+                          ${item.format.replace('_', ' ')}
+                        </span>
+                        <span class="truncate text-gray-500">${escapeHtml(item.metadata.title)}</span>
+                      </div>
+                      <p class="font-serif text-base leading-relaxed hanging-indent">
+                        ${escapeHtml(item.citation)}
+                      </p>
+                      <div class="mt-2 flex items-center gap-3">
+                        <button data-copy-id="${item.id}"
+                          class="copy-btn font-mono text-[10px] uppercase tracking-widest text-gray-400 underline-offset-4 hover:text-red-600 hover:underline">
+                          ${state.copiedId === item.id ? '✓ Tersalin' : 'Salin entri'}
+                        </button>
+                        <button data-remove-id="${item.id}"
+                          class="remove-btn font-mono text-[10px] uppercase tracking-widest text-gray-300 opacity-0 hover:text-red-600 group-hover:opacity-100">
+                          Hapus
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </li>
+              `).join('')}
+            </ol>
+          </section>
+        ` : ''}
+      `;
+
+      // Events
+      document.getElementById('form').addEventListener('submit', handleSubmit);
+      const input = document.getElementById('source-input');
+      input.addEventListener('input', () => {
+        state.value = input.value;
+        document.getElementById('source-hint').textContent = detectSourceType(state.value);
+        document.getElementById('btn-submit').disabled = !state.value.trim();
+      });
+      input.focus();
+
+      document.querySelectorAll('.format-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.format = btn.dataset.format;
+          render();
+        });
+      });
+
+      const copyAllBtn = document.getElementById('copy-all');
+      if (copyAllBtn) copyAllBtn.addEventListener('click', handleCopyAll);
+
+      const clearAllBtn = document.getElementById('clear-all');
+      if (clearAllBtn) clearAllBtn.addEventListener('click', handleClearAll);
+
+      document.querySelectorAll('.copy-btn').forEach(btn => {
+        btn.addEventListener('click', () => handleCopy(btn.dataset.copyId));
+      });
+      document.querySelectorAll('.remove-btn').forEach(btn => {
+        btn.addEventListener('click', () => handleRemove(btn.dataset.removeId));
+      });
+    }
+
+    function detectSourceType(value) {
+      const v = value.trim();
+      if (!v) return 'Ketik URL atau DOI untuk memulai';
+      if (isDoiInput(v)) return '🔗 DOI terdeteksi → CrossRef API (langsung dari browser)';
+      try {
+        new URL(v);
+        return '🔗 URL terdeteksi → edge worker';
+      } catch {
+        return '⚠️ Masukkan URL valid (https://...) atau DOI (10.xxxx/...)';
+      }
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    async function handleSubmit(e) {
+      e.preventDefault();
+      const input = state.value.trim();
+      if (!input) return;
+      state.error = null;
+      state.loading = true;
+      render();
+
+      try {
+        let metadata;
+
+        if (isDoiInput(input)) {
+          // CrossRef langsung dari browser ✅
+          metadata = await fetchFromCrossRef(input);
+        } else {
+          // Lewat Hono Worker (scrape URL) ✅
+          metadata = await fetchFromScraper(input);
+        }
+
+        const citation = formatCitation(metadata, state.format);
+
+        state.history.unshift({
+          id: crypto.randomUUID(),
+          sourceLabel: input,
+          citation,
+          format: state.format,
+          metadata,
+          createdAt: Date.now(),
+        });
+        state.value = '';
+        state.loading = false;
+        render();
+        document.getElementById('source-input').focus();
+      } catch (err) {
+        state.error = err.message || 'Gagal memproses sumber';
+        state.loading = false;
+        render();
+      }
+    }
+
+    async function handleCopy(id) {
+      const item = state.history.find(h => h.id === id);
+      if (!item) return;
+      try {
+        await navigator.clipboard.writeText(item.citation);
+        state.copiedId = id;
+        render();
+        setTimeout(() => { state.copiedId = null; render(); }, 1800);
+      } catch {
+        state.error = 'Gagal menyalin ke clipboard';
+        render();
+      }
+    }
+
+    async function handleCopyAll() {
+      if (state.history.length === 0) return;
+      const sorted = [...state.history].sort((a, b) => a.citation.localeCompare(b.citation, 'id'));
+      const text = sorted.map(h => h.citation).join('\n\n');
+      try {
+        await navigator.clipboard.writeText(text);
+        state.allCopied = true;
+        render();
+        setTimeout(() => { state.allCopied = false; render(); }, 1800);
+      } catch {
+        state.error = 'Gagal menyalin ke clipboard';
+        render();
+      }
+    }
+
+    function handleClearAll() {
+      if (state.history.length === 0) return;
+      if (confirm(`Hapus semua ${state.history.length} entri dari sesi ini?`)) {
+        state.history = [];
+        render();
+      }
+    }
+
+    function handleRemove(id) {
+      state.history = state.history.filter(h => h.id !== id);
+      render();
+    }
+
+    // Init
+    render();
+  </script>
+</body>
+</html>

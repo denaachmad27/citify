@@ -1,0 +1,8 @@
+name = "citify-worker"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Route: Worker ini menangani /api/* di domain yang sama dengan frontend
+# Untuk production, sesuaikan dengan domain frontend:
+# routes = [{ pattern = "citify.app/api/*", zone_id = "<zone-id>" }]

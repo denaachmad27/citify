@@ -1,0 +1,18 @@
+{
+  "name": "citify-worker",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev src/index.ts",
+    "deploy": "wrangler deploy src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "hono": "4.6.20"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "4.20241205.0",
+    "wrangler": "3.95.0",
+    "typescript": "5.6.3"
+  }
+}
